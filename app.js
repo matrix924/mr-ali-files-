@@ -1003,8 +1003,7 @@ function extractPublicIdFromUrl(fileUrl) {
         };
         saveDB();
       }
-      const origin = window.location.origin;
-      const embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&enablejsapi=1&controls=0&disablekb=1&fs=0&iv_load_policy=3&origin=${encodeURIComponent(origin)}`;
+      const embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&controls=1&iv_load_policy=3`;
       const studentName = currentUser ? currentUser.name : 'طالب';
       const watermarkId = 'wm_' + Date.now();
 
@@ -1013,18 +1012,24 @@ function extractPublicIdFromUrl(fileUrl) {
           <div style="position:relative;padding-top:56.25%;">
             <iframe src="${embedUrl}"
               id="player_${watermarkId}"
-              style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;pointer-events:none;"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms">
+              style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen>
             </iframe>
           </div>
           <div id="watermark_${watermarkId}" style="
-            position:absolute;top:0;left:0;width:100%;height:100%;
-            display:flex;flex-wrap:wrap;justify-content:center;align-content:center;
-            pointer-events:none;z-index:10;overflow:hidden;
-          "></div>
+            position:absolute;top:10px;left:10px;
+            pointer-events:none;z-index:10;
+            background:rgba(0,0,0,0.4);
+            color:rgba(255,255,255,0.7);
+            font-size:11px;
+            padding:3px 8px;
+            border-radius:4px;
+            font-weight:bold;
+            letter-spacing:0.5px;
+            white-space:nowrap;
+          ">${Security.escapeHtml(studentName)} | العبقري</div>
           <style>
-            #videoProtect_${watermarkId} iframe { pointer-events: none !important; }
             #videoProtect_${watermarkId} img { -webkit-user-drag:none; user-drag:none; pointer-events:none; }
           </style>
         </div>
@@ -1034,42 +1039,6 @@ function extractPublicIdFromUrl(fileUrl) {
           </button>
         </div>
       `);
-
-      const wmContainer = document.getElementById(`watermark_${watermarkId}`);
-      if (wmContainer) {
-        for (let i = 0; i < 12; i++) {
-          const wm = document.createElement('div');
-          wm.style.cssText = `
-            position:absolute;
-            font-size:14px;
-            color:rgba(255,255,255,0.12);
-            transform:rotate(-25deg);
-            white-space:nowrap;
-            pointer-events:none;
-            font-weight:bold;
-            letter-spacing:1px;
-          `;
-          wm.textContent = `${studentName} | منصة العبقري`;
-          wm.style.top = (Math.random() * 80 + 5) + '%';
-          wm.style.left = (Math.random() * 60 + 10) + '%';
-          wmContainer.appendChild(wm);
-        }
-
-        let wmAngle = 0;
-        const wmInterval = setInterval(() => {
-          if (!document.getElementById(`watermark_${watermarkId}`)) {
-            clearInterval(wmInterval);
-            return;
-          }
-          wmAngle += 0.3;
-          const wms = wmContainer.querySelectorAll('div');
-          wms.forEach((w, i) => {
-            const offsetX = Math.sin(wmAngle + i * 0.5) * 30;
-            const offsetY = Math.cos(wmAngle + i * 0.7) * 20;
-            w.style.transform = `rotate(-25deg) translate(${offsetX}px, ${offsetY}px)`;
-          });
-        }, 100);
-      }
     }
 
     
