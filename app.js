@@ -1003,7 +1003,7 @@ function extractPublicIdFromUrl(fileUrl) {
         };
         saveDB();
       }
-      const embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&controls=1&iv_load_policy=3`;
+      const embedUrl = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&controls=1&iv_load_policy=3&cc_load_policy=0&fs=0`;
       const studentName = currentUser ? currentUser.name : 'طالب';
       const watermarkId = 'wm_' + Date.now();
 
@@ -1017,6 +1017,7 @@ function extractPublicIdFromUrl(fileUrl) {
               allowfullscreen>
             </iframe>
           </div>
+          <div style="position:absolute;bottom:0;right:0;width:200px;height:40px;pointer-events:none;z-index:11;background:rgba(0,0,0,0.9);border-radius:10px 0 0 0;"></div>
           <div id="watermark_${watermarkId}" style="
             position:absolute;top:10px;left:10px;
             pointer-events:none;z-index:10;
@@ -1034,7 +1035,7 @@ function extractPublicIdFromUrl(fileUrl) {
           </style>
         </div>
         <div style="text-align:center;margin-top:12px;">
-          <button class="btn btn-gold" onclick="document.getElementById('examModal').classList.remove('show');">
+          <button class="btn btn-gold" onclick="document.getElementById('generalModal').classList.remove('show');">
             <i class="fas fa-times"></i> إغلاق
           </button>
         </div>
