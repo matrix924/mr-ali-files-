@@ -1,4 +1,15 @@
 
+// ============ Splash Screen ============
+(function() {
+  const splash = document.getElementById('splashScreen');
+  if (!splash) return;
+  setTimeout(() => {
+    splash.style.transition = 'opacity 0.6s ease';
+    splash.style.opacity = '0';
+    setTimeout(() => { splash.style.display = 'none'; }, 600);
+  }, 6000);
+})();
+
 const firebaseConfig = {
     apiKey: "AIzaSyB0aU5Yc_3z4ue50_q8VScsOxJWe8ysEgc",
     authDomain: "mr-ali-3cd16.firebaseapp.com",
@@ -1214,9 +1225,11 @@ function extractPublicIdFromUrl(fileUrl) {
                 </button>
               </div>
               <p style="margin:8px 0;"><strong>${Security.escapeHtml(q.text)}</strong></p>
+              ${q.questionImage ? `<img src="${q.questionImage}" style="max-width:100%;border-radius:10px;margin:10px 0;border:1px solid var(--border-color);">` : ''}
               ${q.options.map((o, oi) => `
                 <div class="option-item ${oi === q.correctAnswer ? 'correct' : ''}">
                   ${oi + 1}. ${Security.escapeHtml(o)}
+                  ${q.optionImages && q.optionImages[oi] ? `<img src="${q.optionImages[oi]}" style="max-width:120px;border-radius:8px;margin-right:10px;">` : ''}
                   ${oi === q.correctAnswer ? ' <i class="fas fa-check-circle" style="color:var(--success);margin-right:auto;"></i>' : ''}
                 </div>
               `).join('')}
@@ -1227,20 +1240,40 @@ function extractPublicIdFromUrl(fileUrl) {
           <h4 style="color:var(--gold);margin-bottom:15px;"><i class="fas fa-plus-circle"></i> إضافة سؤال جديد</h4>
           <div class="form-group">
             <label>نص السؤال</label>
-            <textarea class="form-control" id="qText" placeholder="اكتب السؤال هنا..."></textarea>
+            <textarea class="form-control" id="qText" placeholder="اكتب السؤال هنا... (اختياري لو هتضيف صورة)"></textarea>
           </div>
           <div class="form-group">
-            <label>الخيارات (4 خيارات)</label>
-            <input class="form-control qOpt" placeholder="الخيار الصحيح" style="margin-bottom:5px;">
-            <input class="form-control qOpt" placeholder="الخيار الثاني" style="margin-bottom:5px;">
-            <input class="form-control qOpt" placeholder="الخيار الثالث" style="margin-bottom:5px;">
-            <input class="form-control qOpt" placeholder="الخيار الرابع">
+            <label>صورة السؤال (اختياري)</label>
+            <input type="file" class="form-control" id="qImage" accept="image/*" style="padding:10px;">
+            <div id="qImagePreview" style="margin-top:5px;"></div>
+          </div>
+          <div class="form-group">
+            <label>الخيارات (2-4 خيارات) - كل خيار ممكن يكون نص أو صورة أو الاتنين</label>
+            <div id="optionsContainer">
+              <div class="option-row" style="display:flex;gap:8px;align-items:center;margin-bottom:5px;">
+                <input class="form-control qOpt" placeholder="الخيار الصحيح" style="flex:1;">
+                <label class="btn btn-sm btn-outline" style="white-space:nowrap;cursor:pointer;">
+                  <i class="fas fa-image"></i> صورة
+                  <input type="file" accept="image/*" class="qOptImg" style="display:none;">
+                </label>
+              </div>
+              <div class="option-row" style="display:flex;gap:8px;align-items:center;margin-bottom:5px;">
+                <input class="form-control qOpt" placeholder="الخيار الثاني" style="flex:1;">
+                <label class="btn btn-sm btn-outline" style="white-space:nowrap;cursor:pointer;">
+                  <i class="fas fa-image"></i> صورة
+                  <input type="file" accept="image/*" class="qOptImg" style="display:none;">
+                </label>
+              </div>
+            </div>
+            <button class="btn btn-sm btn-outline" onclick="addOptionRow()" style="margin-top:5px;">
+              <i class="fas fa-plus"></i> إضافة خيار
+            </button>
           </div>
           <div class="form-group">
             <label>رقم الإجابة الصحيحة (1-4)</label>
             <input type="number" class="form-control" id="qCorrect" min="1" max="4" value="1">
           </div>
-          <button class="btn btn-gold btn-block" onclick="addQ('${stageId}',${examIndex})">
+          <button class="btn btn-gold btn-block" id="addQBtn" onclick="addQ('${stageId}',${examIndex})">
             <i class="fas fa-plus"></i> إضافة السؤال
           </button>
         </div>
@@ -1250,22 +1283,80 @@ function extractPublicIdFromUrl(fileUrl) {
       `);
     }
 
-    function addQ(stageId, examIndex) {
+    function addOptionRow() {
+      const container = document.getElementById('optionsContainer');
+      const count = container.querySelectorAll('.option-row').length;
+      if (count >= 4) { showToast('الحد الأقصى 4 خيارات', 'error'); return; }
+      const labels = ['الخيار الثالث', 'الخيار الرابع'];
+      const row = document.createElement('div');
+      row.className = 'option-row';
+      row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:5px;';
+      row.innerHTML = `
+        <input class="form-control qOpt" placeholder="${labels[count - 2] || 'خيار'}" style="flex:1;">
+        <label class="btn btn-sm btn-outline" style="white-space:nowrap;cursor:pointer;">
+          <i class="fas fa-image"></i> صورة
+          <input type="file" accept="image/*" class="qOptImg" style="display:none;">
+        </label>
+        <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
+      `;
+      container.appendChild(row);
+    }
+
+    async function addQ(stageId, examIndex) {
       const text = document.getElementById('qText').value.trim();
-      const opts = Array.from(document.querySelectorAll('.qOpt')).map(i => i.value.trim()).filter(v => v);
+      const optEls = document.querySelectorAll('#optionsContainer .option-row');
+      const imgEls = document.querySelectorAll('.qOptImg');
       const correct = parseInt(document.getElementById('qCorrect').value) - 1;
+      const qImgFile = document.getElementById('qImage').files[0];
 
-      if (!validateField(text, 'نص السؤال', 5)) return;
-      if (opts.length < 2) { showToast('أدخل خيارين على الأقل', 'error'); return; }
-      if (correct < 0 || correct >= opts.length) { showToast('رقم الإجابة غير صحيح', 'error'); return; }
+      if (!text && !qImgFile) { showToast('أدخل نص السؤال أو صورة', 'error'); return; }
+      if (optEls.length < 2) { showToast('أدخل خيارين على الأقل', 'error'); return; }
+      if (correct < 0 || correct >= optEls.length) { showToast('رقم الإجابة غير صحيح', 'error'); return; }
 
-      DB.exams[stageId][examIndex].questions.push({
+      const btn = document.getElementById('addQBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الرفع...';
+
+      let questionImage = null;
+      if (qImgFile) {
+        try {
+          const r = await uploadToCloudinary(qImgFile, stageId);
+          questionImage = r.url;
+        } catch(e) { console.error(e); }
+      }
+
+      const opts = [];
+      const optionImages = [];
+      let hasOptionImages = false;
+      for (let i = 0; i < optEls.length; i++) {
+        const val = optEls[i].querySelector('.qOpt').value.trim();
+        opts.push(val);
+        const imgFile = optEls[i].querySelector('.qOptImg')?.files[0];
+        if (imgFile) {
+          try {
+            const r = await uploadToCloudinary(imgFile, stageId);
+            optionImages[i] = r.url;
+            hasOptionImages = true;
+          } catch(e) { console.error(e); optionImages[i] = null; }
+        }
+      }
+
+      const validOpts = opts.filter(v => v);
+      if (validOpts.length < 2 && !hasOptionImages) { showToast('أدخل خيارين على الأقل', 'error'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-plus"></i> إضافة السؤال'; return; }
+
+      const question = {
         id: 'q_' + Date.now(),
         text: text,
         options: opts,
         correctAnswer: correct
-      });
+      };
+      if (questionImage) question.questionImage = questionImage;
+      if (hasOptionImages) question.optionImages = optionImages;
+
+      DB.exams[stageId][examIndex].questions.push(question);
       saveDB();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-plus"></i> إضافة السؤال';
       editExamQs(stageId, examIndex);
       showToast('تمت إضافة السؤال!');
     }
@@ -1295,9 +1386,11 @@ function extractPublicIdFromUrl(fileUrl) {
           <div class="question-item">
             <h4 style="color:var(--gold);">سؤال ${i + 1}</h4>
             <p style="margin:8px 0;"><strong>${Security.escapeHtml(q.text)}</strong></p>
+            ${q.questionImage ? `<img src="${q.questionImage}" style="max-width:100%;border-radius:10px;margin:10px 0;">` : ''}
             ${q.options.map((o, oi) => `
               <div class="option-item ${oi === q.correctAnswer ? 'correct' : ''}">
                 ${Security.escapeHtml(o)}
+                ${q.optionImages && q.optionImages[oi] ? `<img src="${q.optionImages[oi]}" style="max-width:120px;border-radius:8px;margin-right:10px;">` : ''}
                 ${oi === q.correctAnswer ? ' <i class="fas fa-check-circle" style="color:var(--success);margin-right:auto;"></i>' : ''}
               </div>
             `).join('')}
@@ -1821,11 +1914,13 @@ function extractPublicIdFromUrl(fileUrl) {
         <div class="exam-question">
           <h4>سؤال ${qi + 1}</h4>
           <div class="question-text">${Security.escapeHtml(q.text)}</div>
+          ${q.questionImage ? `<img src="${q.questionImage}" style="max-width:100%;border-radius:10px;margin:10px 0;">` : ''}
           <div id="examOptions">
             ${q.options.map((o, oi) => `
               <div class="option-item ${examState.answers[qi] === oi ? 'selected' : ''}" onclick="selectExamOption(${qi}, ${oi})">
                 <span style="font-weight:bold;min-width:25px;">${oi + 1}.</span>
                 <span>${Security.escapeHtml(o)}</span>
+                ${q.optionImages && q.optionImages[oi] ? `<img src="${q.optionImages[oi]}" style="max-width:150px;border-radius:8px;margin-right:auto;">` : ''}
               </div>
             `).join('')}
           </div>
@@ -1924,6 +2019,7 @@ function extractPublicIdFromUrl(fileUrl) {
                     </span>
                   </div>
                   <p style="margin:8px 0;"><strong>${Security.escapeHtml(q.text)}</strong></p>
+                  ${q.questionImage ? `<img src="${q.questionImage}" style="max-width:100%;border-radius:10px;margin:10px 0;">` : ''}
                   ${q.options.map((o, oi) => {
                     let cls = '';
                     if (oi === q.correctAnswer) cls = 'correct';
@@ -1931,6 +2027,7 @@ function extractPublicIdFromUrl(fileUrl) {
                     return `
                       <div class="option-item ${cls}">
                         ${oi + 1}. ${Security.escapeHtml(o)}
+                        ${q.optionImages && q.optionImages[oi] ? `<img src="${q.optionImages[oi]}" style="max-width:120px;border-radius:8px;margin-right:10px;">` : ''}
                         ${oi === q.correctAnswer ? ' <i class="fas fa-check" style="color:var(--success);margin-right:auto;"></i>' : ''}
                         ${oi === userAnswer && !isCorrect ? ' <i class="fas fa-times" style="color:var(--danger);margin-right:auto;"></i>' : ''}
                       </div>
