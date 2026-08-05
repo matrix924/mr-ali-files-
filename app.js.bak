@@ -128,108 +128,15 @@ function extractPublicIdFromUrl(fileUrl) {
       sec1: 'الأول الثانوي', sec2: 'الثاني الثانوي', sec3: 'الثالث الثانوي'
     };
 
-    const CATEGORIES = ['lectures', 'exercises', 'review'];
-    const CATEGORY_NAMES = {
-      lectures: 'شرح',
-      exercises: 'حل تمارين',
-      review: 'مراجعة'
-    };
-    const CATEGORY_ICONS = {
-      lectures: 'fa-chalkboard-teacher',
-      exercises: 'fa-pencil-ruler',
-      review: 'fa-book-open'
-    };
-
-    function createEmptyContent() {
-      const c = {};
-      STAGES.forEach(s => {
-        c[s] = {};
-        CATEGORIES.forEach(cat => c[s][cat] = []);
-      });
-      return c;
-    }
-
     
     const DB = {
       teachers: [],
       students: [],
       parents: [],
-      content: createEmptyContent(),
+      content: {"prep1":[],"prep2":[],"prep3":[],"sec1":[],"sec2":[],"sec3":[]},
       exams: {"prep1":[],"prep2":[],"prep3":[],"sec1":[],"sec2":[],"sec3":[]},
       tracking: {}
     };
-
-    function migrateContent(oldContent) {
-      if (!oldContent) return createEmptyContent();
-      const newContent = createEmptyContent();
-      STAGES.forEach(s => {
-        if (Array.isArray(oldContent[s])) {
-          oldContent[s].forEach(item => {
-            item.category = item.category || 'lectures';
-            if (!newContent[s][item.category]) newContent[s][item.category] = [];
-            newContent[s][item.category].push(item);
-          });
-        } else if (oldContent[s] && typeof oldContent[s] === 'object') {
-          CATEGORIES.forEach(cat => {
-            if (Array.isArray(oldContent[s][cat])) {
-              newContent[s][cat] = oldContent[s][cat];
-            }
-          });
-        }
-      });
-      return newContent;
-    }
-
-    function getAllStageItems(stageId) {
-      const items = [];
-      const stageContent = DB.content[stageId];
-      if (!stageContent) return items;
-      CATEGORIES.forEach(cat => {
-        (stageContent[cat] || []).forEach(item => {
-          items.push({ ...item, stageId, category: cat });
-        });
-      });
-      return items;
-    }
-
-    function getAllContentItems() {
-      const items = [];
-      STAGES.forEach(s => {
-        getAllStageItems(s).forEach(item => items.push(item));
-      });
-      return items;
-    }
-
-    function findItem(stageId, id) {
-      const stageContent = DB.content[stageId];
-      if (!stageContent) return null;
-      for (const cat of CATEGORIES) {
-        const item = (stageContent[cat] || []).find(c => c.id === id);
-        if (item) return { item, category: cat };
-      }
-      return null;
-    }
-
-    function findItemGlobal(id) {
-      for (const s of STAGES) {
-        const found = findItem(s, id);
-        if (found) return { ...found, stageId: s };
-      }
-      return null;
-    }
-
-    function removeItem(stageId, id) {
-      const stageContent = DB.content[stageId];
-      if (!stageContent) return false;
-      for (const cat of CATEGORIES) {
-        const idx = (stageContent[cat] || []).findIndex(c => c.id === id);
-        if (idx !== -1) {
-          stageContent[cat].splice(idx, 1);
-          return true;
-        }
-      }
-      return false;
-    }
 
     let currentUser = null;
     let examState = { currentExam: null, answers: {}, timeRemaining: 0, timerInterval: null, currentQuestion: 0 };
@@ -525,8 +432,8 @@ function extractPublicIdFromUrl(fileUrl) {
 
     // ============ Overview ============
     function loadOverview() {
-      let totalContent = getAllContentItems().length;
-      let totalExams = 0;
+      let totalContent = 0, totalExams = 0;
+      Object.values(DB.content).forEach(a => totalContent += a.length);
       Object.values(DB.exams).forEach(a => totalExams += a.length);
 
       const isTeacher = currentUser.role === 'teacher';
@@ -571,7 +478,7 @@ function extractPublicIdFromUrl(fileUrl) {
             </div>
           ` : `
             <div class="stat-card">
-              <div class="stat-value">${getAllStageItems(effectiveGrade).length}</div>
+              <div class="stat-value">${(DB.content[effectiveGrade] || []).length}</div>
               <div class="stat-label"><i class="fas fa-book-open"></i> محتوى متاح</div>
             </div>
             <div class="stat-card">
@@ -582,7 +489,7 @@ function extractPublicIdFromUrl(fileUrl) {
               const tracking = DB.tracking[linkedStudent.id] || { examScores: {}, completedLessons: [] };
               const scores = Object.values(tracking.examScores);
               const avg = scores.length > 0 ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
-              const total = getAllStageItems(linkedStudent.grade).length;
+              const total = (DB.content[linkedStudent.grade] || []).length;
               const done = tracking.completedLessons.length;
               return `
                 <div class="stat-card">
@@ -610,7 +517,7 @@ function extractPublicIdFromUrl(fileUrl) {
     // ============ Content Management (Teacher) ============
     function getContentCountByStage() {
       const counts = {};
-      STAGES.forEach(s => counts[s] = getAllStageItems(s).length);
+      STAGES.forEach(s => counts[s] = (DB.content[s] || []).length);
       counts.all = Object.values(counts).reduce((a, b) => a + b, 0);
       return counts;
     }
@@ -630,10 +537,6 @@ function extractPublicIdFromUrl(fileUrl) {
         <div class="tabs" id="stageTabs">
           <button class="tab-btn active" data-stage="all">الكل (${counts.all})</button>
           ${STAGES.map(s => `<button class="tab-btn" data-stage="${s}">${getStageName(s)} (${counts[s]})</button>`).join('')}
-        </div>
-        <div class="tabs" id="categoryTabs" style="margin-bottom:15px;">
-          <button class="tab-btn active" data-category="all">الكل</button>
-          ${CATEGORIES.map(cat => `<button class="tab-btn" data-category="${cat}"><i class="fas ${CATEGORY_ICONS[cat]}"></i> ${CATEGORY_NAMES[cat]}</button>`).join('')}
         </div>
         <div class="tabs" id="typeTabs" style="margin-bottom:15px;">
           <button class="tab-btn active" data-type="all">الكل</button>
@@ -655,14 +558,6 @@ function extractPublicIdFromUrl(fileUrl) {
         });
       });
 
-      document.querySelectorAll('#categoryTabs .tab-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          document.querySelectorAll('#categoryTabs .tab-btn').forEach(b => b.classList.remove('active'));
-          this.classList.add('active');
-          renderContent();
-        });
-      });
-
       document.querySelectorAll('#typeTabs .tab-btn').forEach(btn => {
         btn.addEventListener('click', function() {
           document.querySelectorAll('#typeTabs .tab-btn').forEach(b => b.classList.remove('active'));
@@ -676,19 +571,16 @@ function extractPublicIdFromUrl(fileUrl) {
 
     function renderContent() {
       const activeStage = document.querySelector('#stageTabs .tab-btn.active')?.dataset?.stage || 'all';
-      const activeCategory = document.querySelector('#categoryTabs .tab-btn.active')?.dataset?.category || 'all';
       const activeType = document.querySelector('#typeTabs .tab-btn.active')?.dataset?.type || 'all';
       const searchQuery = (document.getElementById('contentSearch')?.value || '').toLowerCase();
       let items = [];
 
       if (activeStage === 'all') {
-        items = getAllContentItems();
+        Object.entries(DB.content).forEach(([stageId, arr]) => {
+          arr.forEach(item => items.push({ ...item, stageId }));
+        });
       } else {
-        items = getAllStageItems(activeStage);
-      }
-
-      if (activeCategory !== 'all') {
-        items = items.filter(i => i.category === activeCategory);
+        (DB.content[activeStage] || []).forEach(item => items.push({ ...item, stageId: activeStage }));
       }
 
       if (activeType !== 'all') {
@@ -731,9 +623,6 @@ function extractPublicIdFromUrl(fileUrl) {
           badgeText = 'ملف';
         }
 
-        const catName = CATEGORY_NAMES[item.category] || item.category;
-        const catIcon = CATEGORY_ICONS[item.category] || 'fa-folder';
-
         const thumbHtml = item.type === 'video' && item.videoId ?
           `<div style="margin-bottom:12px;border-radius:10px;overflow:hidden;position:relative;">
             <img src="https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg" alt="${Security.escapeHtml(item.title)}"
@@ -754,7 +643,7 @@ function extractPublicIdFromUrl(fileUrl) {
             <h4>${Security.escapeHtml(item.title)}</h4>
             <p style="color:var(--text-secondary);font-size:0.9rem;">${Security.escapeHtml(item.description || '')}</p>
             <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:8px;">
-              <i class="fas fa-graduation-cap"></i> ${getStageName(item.stageId)} | <i class="fas ${catIcon}"></i> ${catName}
+              <i class="fas fa-graduation-cap"></i> ${getStageName(item.stageId || stageId)}
             </p>
             ${item.fileSize ? `
               <p style="font-size:0.8rem;color:var(--text-secondary);">
@@ -776,22 +665,15 @@ function extractPublicIdFromUrl(fileUrl) {
     }
 
     function editContentItem(stageId, id) {
-      const found = findItem(stageId, id);
-      if (!found) return;
-      const item = found.item;
-      const currentCat = found.category;
+      const item = (DB.content[stageId] || []).find(c => c.id === id);
+      if (!item) return;
+
       const isVideo = item.type === 'video';
       showModal('تعديل المحتوى', `
         <div class="form-group">
           <label>الصف الدراسي</label>
           <select class="form-control" id="editStage">
             ${STAGES.map(s => `<option value="${s}" ${s === stageId ? 'selected' : ''}>${getStageName(s)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>القسم</label>
-          <select class="form-control" id="editCategory">
-            ${CATEGORIES.map(c => `<option value="${c}" ${c === currentCat ? 'selected' : ''}>${CATEGORY_NAMES[c]}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -816,20 +698,17 @@ function extractPublicIdFromUrl(fileUrl) {
 
     function saveEditContent(oldStageId, id, type) {
       const newStage = document.getElementById('editStage').value;
-      const newCategory = document.getElementById('editCategory').value;
       const newTitle = document.getElementById('editTitle').value.trim();
       const newDesc = document.getElementById('editDesc').value.trim();
 
       if (!validateField(newTitle, 'العنوان', 3)) return;
 
-      const found = findItem(oldStageId, id);
-      if (!found) return;
+      const itemIndex = (DB.content[oldStageId] || []).findIndex(c => c.id === id);
+      if (itemIndex === -1) return;
 
-      const oldCat = found.category;
-      const item = found.item;
+      const item = DB.content[oldStageId][itemIndex];
       item.title = newTitle;
       item.description = newDesc;
-      item.category = newCategory;
 
       if (type === 'video') {
         const newUrl = document.getElementById('editUrl').value.trim();
@@ -841,11 +720,11 @@ function extractPublicIdFromUrl(fileUrl) {
         }
       }
 
-      if (newStage !== oldStageId || newCategory !== oldCat) {
-        DB.content[oldStageId][oldCat] = DB.content[oldStageId][oldCat].filter(c => c.id !== id);
+      if (newStage !== oldStageId) {
+        DB.content[oldStageId].splice(itemIndex, 1);
+        if (!DB.content[newStage]) DB.content[newStage] = [];
         item.stageId = newStage;
-        if (!DB.content[newStage][newCategory]) DB.content[newStage][newCategory] = [];
-        DB.content[newStage][newCategory].push(item);
+        DB.content[newStage].push(item);
       }
 
       saveDB();
@@ -860,12 +739,6 @@ function extractPublicIdFromUrl(fileUrl) {
           <label>الصف الدراسي</label>
           <select class="form-control" id="vStage">
             ${STAGES.map(s => `<option value="${s}">${getStageName(s)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>القسم</label>
-          <select class="form-control" id="vCategory">
-            ${CATEGORIES.map(c => `<option value="${c}">${CATEGORY_NAMES[c]}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -887,7 +760,6 @@ function extractPublicIdFromUrl(fileUrl) {
 
     function saveVideo() {
       const s = document.getElementById('vStage').value;
-      const c = document.getElementById('vCategory').value;
       const t = document.getElementById('vTitle').value.trim();
       const u = document.getElementById('vUrl').value.trim();
       const d = document.getElementById('vDesc').value.trim();
@@ -898,11 +770,9 @@ function extractPublicIdFromUrl(fileUrl) {
       const vid = extractYouTubeId(u);
       if (!vid) { showToast('رابط يوتيوب غير صالح', 'error'); return; }
 
-      if (!DB.content[s][c]) DB.content[s][c] = [];
-      DB.content[s][c].push({
+      DB.content[s].push({
         id: 'v_' + Date.now(),
         stageId: s,
-        category: c,
         title: t,
         videoId: vid,
         url: u,
@@ -922,12 +792,6 @@ function extractPublicIdFromUrl(fileUrl) {
           <label>الصف الدراسي</label>
           <select class="form-control" id="pStage">
             ${STAGES.map(s => `<option value="${s}">${getStageName(s)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>القسم</label>
-          <select class="form-control" id="pCategory">
-            ${CATEGORIES.map(c => `<option value="${c}">${CATEGORY_NAMES[c]}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -981,7 +845,6 @@ function extractPublicIdFromUrl(fileUrl) {
     
     async function savePDF() {
       const s = document.getElementById('pStage').value;
-      const c = document.getElementById('pCategory').value;
       const t = document.getElementById('pTitle').value.trim();
       const d = document.getElementById('pDesc').value.trim();
 
@@ -993,11 +856,9 @@ function extractPublicIdFromUrl(fileUrl) {
         const fileId = 'pdf_' + Date.now();
         const result = await uploadToCloudinary(window._pdf, s);
 
-        if (!DB.content[s][c]) DB.content[s][c] = [];
-        DB.content[s][c].push({
+        DB.content[s].push({
           id: fileId,
           stageId: s,
-          category: c,
           title: t,
           description: d,
           type: 'pdf',
@@ -1024,12 +885,6 @@ function extractPublicIdFromUrl(fileUrl) {
           <label>الصف الدراسي</label>
           <select class="form-control" id="fStage">
             ${STAGES.map(s => `<option value="${s}">${getStageName(s)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>القسم</label>
-          <select class="form-control" id="fCategory">
-            ${CATEGORIES.map(c => `<option value="${c}">${CATEGORY_NAMES[c]}</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -1065,72 +920,11 @@ function extractPublicIdFromUrl(fileUrl) {
           return;
         }
         window._file = f;
-        document.getElementById('fileInfo').innerHTML = `
-          <div class="file-info">
-            <i class="fas fa-file"></i>
-            <div style="flex:1;">
-              <strong>${Security.escapeHtml(f.name)}</strong>
-              <span style="color:var(--text-secondary);margin-right:10px;">${formatSize(f.size)}</span>
-            </div>
-            <button class="btn btn-sm btn-danger" onclick="window._file=null;document.getElementById('fileInfo').innerHTML='';" style="padding:3px 8px;">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-        `;
-      }
-    }
-
-    async function saveFile() {
-      const s = document.getElementById('fStage').value;
-      const c = document.getElementById('fCategory').value;
-      const t = document.getElementById('fTitle').value.trim();
-      const d = document.getElementById('fDesc').value.trim();
-
-      if (!validateField(t, 'العنوان', 3)) return;
-      if (!window._file) { showToast('اختر ملف', 'error'); return; }
-
-      try {
-        showToast('جاري رفع الملف على Cloudinary...', 'info');
-        const fileId = 'file_' + Date.now();
-        const result = await uploadToCloudinary(window._file, s);
-
-        if (!DB.content[s][c]) DB.content[s][c] = [];
-        DB.content[s][c].push({
-          id: fileId,
-          stageId: s,
-          category: c,
-          title: t,
-          description: d,
-          type: 'file',
-          fileName: window._file.name,
           fileSize: window._file.size,
           fileUrl: result.url,
           cloudinaryPublicId: result.publicId,
           date: new Date().toISOString()
         });
-        saveDB();
-        closeModal();
-        renderContent();
-        showToast('تم رفع الملف بنجاح!');
-      } catch (e) {
-        console.error('Cloudinary upload error:', e);
-        showToast('خطأ في رفع الملف: ' + e.message, 'error');
-      }
-    }
-
-    function playVideo(videoId, title) {
-      const eff = getEffectiveUser();
-      const studentName = eff ? eff.name : 'طالب';
-      const watermarkId = 'wm_' + Date.now();
-
-      showModal(title, `
-        <div id="videoProtect_${watermarkId}" style="position:relative;">
-          <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:10px;">
-            <iframe src="https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1" 
-              style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" 
-              allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">
-            </iframe>
-          </div>
           <div id="watermark_${watermarkId}" style="
             position:absolute;top:10px;left:10px;
             pointer-events:none;z-index:10;
@@ -1153,52 +947,11 @@ function extractPublicIdFromUrl(fileUrl) {
           </button>
         </div>
       `);
-
-      if (eff && eff.id && videoId) {
-        if (!DB.tracking[eff.id]) {
-          DB.tracking[eff.id] = { completedLessons: [], videoProgress: {}, examScores: {} };
-        }
-        if (!DB.tracking[eff.id].videoProgress) DB.tracking[eff.id].videoProgress = {};
-        if (!DB.tracking[eff.id].videoProgress[videoId]) {
-          DB.tracking[eff.id].videoProgress[videoId] = { watched: true, date: new Date().toISOString() };
-        } else {
-          DB.tracking[eff.id].videoProgress[videoId].watched = true;
-        }
-        saveDB();
-      }
-    }
-
-    function setupDragDrop(dropAreaId, inputId, acceptTypes) {
-      const dropArea = document.getElementById(dropAreaId);
-      const input = document.getElementById(inputId);
-      if (!dropArea || !input) return;
-
-      dropArea.addEventListener('click', () => input.click());
-
-      dropArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropArea.classList.add('dragover');
-      });
-
-      dropArea.addEventListener('dragleave', () => {
-        dropArea.classList.remove('dragover');
-      });
-
-      dropArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropArea.classList.remove('dragover');
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-          input.files = files;
-          input.dispatchEvent(new Event('change'));
-        }
-      });
     }
 
     
     function downloadItem(stageId, id) {
-      const found = findItem(stageId, id);
-      const item = found ? found.item : null;
+      const item = (DB.content[stageId] || []).find(c => c.id === id);
       if (item) {
         const eff = getEffectiveUser();
         if (eff && eff.id && !DB.tracking[eff.id]?.completedLessons?.includes(id)) {
@@ -1233,9 +986,8 @@ function extractPublicIdFromUrl(fileUrl) {
 
 
     async function deleteItem(stageId, id) {
-      const found = findItem(stageId, id);
-      if (!found) return;
-      const item = found.item;
+      const item = (DB.content[stageId] || []).find(c => c.id === id);
+      if (!item) return;
       if (confirm(`هل أنت متأكد من حذف "${item.title}"؟`)) {
         showToast('جاري حذف الملف من السيرفر...', 'info');
         let deleted = false;
@@ -1248,7 +1000,7 @@ function extractPublicIdFromUrl(fileUrl) {
           console.log('Extracted publicId from URL:', extractedId);
           if (extractedId) await deleteFromCloudinary(extractedId);
         }
-        removeItem(stageId, id);
+        DB.content[stageId] = (DB.content[stageId] || []).filter(c => c.id !== id);
         saveDB();
         renderContent();
         showToast('تم الحذف بنجاح');
@@ -1790,7 +1542,7 @@ function extractPublicIdFromUrl(fileUrl) {
 
       studentsToShow.forEach(student => {
         const tracking = DB.tracking[student.id] || { completedLessons: [], videoProgress: {}, examScores: {} };
-        const totalLessons = getAllStageItems(student.grade).length;
+        const totalLessons = (DB.content[student.grade] || []).length;
         const completedCount = tracking.completedLessons.length;
         const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
         const examCount = Object.keys(tracking.examScores).length;
@@ -1864,33 +1616,17 @@ function extractPublicIdFromUrl(fileUrl) {
     function loadStudentContentView() {
       const eff = getEffectiveUser();
       const grade = eff.grade;
-      const allItems = getAllStageItems(grade);
-      const catCounts = {};
-      CATEGORIES.forEach(cat => catCounts[cat] = 0);
-      allItems.forEach(item => { if (catCounts[item.category] !== undefined) catCounts[item.category]++; });
+      const items = DB.content[grade] || [];
 
       document.getElementById('dashboardContent').innerHTML = `
         <h2 style="color: var(--gold); margin-bottom: 25px;">
           <i class="fas fa-book-open"></i> المحتوى التعليمي - ${getStageName(grade)}${currentUser.role === 'parent' ? ` (${Security.escapeHtml(eff.name)})` : ''}
         </h2>
-        <div class="tabs" id="studentCategoryTabs">
-          <button class="tab-btn active" data-category="all">الكل (${allItems.length})</button>
-          ${CATEGORIES.map(cat => `<button class="tab-btn" data-category="${cat}"><i class="fas ${CATEGORY_ICONS[cat]}"></i> ${CATEGORY_NAMES[cat]} (${catCounts[cat]})</button>`).join('')}
-        </div>
         <div class="search-bar">
           <input type="text" class="form-control" placeholder="بحث في المحتوى..." id="studentContentSearch" oninput="renderStudentContent()">
         </div>
         <div class="lesson-grid" id="studentContentGrid"></div>
       `;
-
-      document.querySelectorAll('#studentCategoryTabs .tab-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          document.querySelectorAll('#studentCategoryTabs .tab-btn').forEach(b => b.classList.remove('active'));
-          this.classList.add('active');
-          renderStudentContent();
-        });
-      });
-
       renderStudentContent();
     }
 
@@ -1898,12 +1634,7 @@ function extractPublicIdFromUrl(fileUrl) {
       const eff = getEffectiveUser();
       const grade = eff.grade;
       const search = (document.getElementById('studentContentSearch')?.value || '').toLowerCase();
-      const activeCategory = document.querySelector('#studentCategoryTabs .tab-btn.active')?.dataset?.category || 'all';
-      let items = getAllStageItems(grade);
-
-      if (activeCategory !== 'all') {
-        items = items.filter(i => i.category === activeCategory);
-      }
+      let items = DB.content[grade] || [];
 
       if (search) {
         items = items.filter(i =>
@@ -1943,7 +1674,6 @@ function extractPublicIdFromUrl(fileUrl) {
           badgeText = 'ملف';
         }
 
-        const catName = CATEGORY_NAMES[item.category] || item.category;
         const isWatched = item.type === 'video' && item.videoId && tracking.videoProgress[item.videoId]?.watched;
         const isCompleted = item.type !== 'video' && tracking.completedLessons.includes(item.id);
         const statusBadge = isWatched ? '<span class="badge badge-success" style="margin-right:5px;"><i class="fas fa-check"></i> تم المشاهدة</span>' :
@@ -1951,11 +1681,7 @@ function extractPublicIdFromUrl(fileUrl) {
 
         return `
           <div class="content-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span class="badge ${badgeClass}">${badgeText}</span>
-              <span class="badge" style="background:var(--input-bg);color:var(--text-primary);">${catName}</span>
-            </div>
-            ${statusBadge}
+            <span class="badge ${badgeClass}">${badgeText}</span> ${statusBadge}
             <div style="text-align:center;margin:15px 0;">${icon}</div>
             <h4>${Security.escapeHtml(item.title)}</h4>
             <p style="color:var(--text-secondary);font-size:0.9rem;">${Security.escapeHtml(item.description || '')}</p>
@@ -1965,7 +1691,7 @@ function extractPublicIdFromUrl(fileUrl) {
             <div style="margin-top:12px;">
               ${item.type === 'video' ?
                 `<button class="btn btn-info btn-block" onclick="playVideo('${item.videoId}','${Security.escapeHtml(item.title).replace(/'/g, "\\'")}')"><i class="fas fa-play"></i> مشاهدة</button>` :
-                `<button class="btn btn-info btn-block" onclick="downloadItem('${item.stageId}','${item.id}')"><i class="fas fa-eye"></i> مشاهدة</button>`
+                `<button class="btn btn-info btn-block" onclick="downloadItem('${item.stageId || grade}','${item.id}')"><i class="fas fa-eye"></i> مشاهدة</button>`
               }
             </div>
           </div>
@@ -2235,7 +1961,7 @@ function extractPublicIdFromUrl(fileUrl) {
       const eff = getEffectiveUser();
       const tracking = DB.tracking[eff.id] || { completedLessons: [], videoProgress: {}, examScores: {} };
       const grade = eff.grade;
-      const allContent = getAllStageItems(grade);
+      const allContent = DB.content[grade] || [];
       const totalLessons = allContent.length;
       const completedCount = tracking.completedLessons.length;
       const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
@@ -2352,7 +2078,7 @@ function extractPublicIdFromUrl(fileUrl) {
         exams: DB.exams,
         tracking: DB.tracking,
         exportDate: new Date().toISOString(),
-        version: '3.0'
+        version: '2.0'
       };
 
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2382,7 +2108,7 @@ function extractPublicIdFromUrl(fileUrl) {
           DB.teachers = data.teachers || DB.teachers;
           DB.students = data.students || [];
           DB.parents = data.parents || [];
-          DB.content = data.content ? migrateContent(data.content) : DB.content;
+          DB.content = data.content || DB.content;
           DB.exams = data.exams || DB.exams;
           DB.tracking = data.tracking || {};
 
@@ -2405,7 +2131,7 @@ function extractPublicIdFromUrl(fileUrl) {
       DB.teachers = [];
       DB.students = [];
       DB.parents = [];
-      DB.content = createEmptyContent();
+      DB.content = {"prep1":[],"prep2":[],"prep3":[],"sec1":[],"sec2":[],"sec3":[]};
       DB.exams = {"prep1":[],"prep2":[],"prep3":[],"sec1":[],"sec2":[],"sec3":[]};
       DB.tracking = {};
 
@@ -2500,7 +2226,7 @@ function extractPublicIdFromUrl(fileUrl) {
             DB.parents = d.parents || [];
         }
         const contentDoc = await db.collection('platform').doc('content').get();
-        if(contentDoc.exists) DB.content = migrateContent(contentDoc.data());
+        if(contentDoc.exists) DB.content = contentDoc.data();
         const examsDoc = await db.collection('platform').doc('exams').get();
         if(examsDoc.exists) DB.exams = examsDoc.data();
         const trackingDoc = await db.collection('platform').doc('tracking').get();
@@ -2588,10 +2314,6 @@ window.formatDate = formatDate;
 window.createExam = createExam;
 window.renderStudentContent = renderStudentContent;
 window.editExamQs = editExamQs;
-window.getAllStageItems = getAllStageItems;
-window.getAllContentItems = getAllContentItems;
-window.CATEGORY_NAMES = CATEGORY_NAMES;
-window.CATEGORY_ICONS = CATEGORY_ICONS;
 
 window.savePDF = savePDF;
 window.saveFile = saveFile;

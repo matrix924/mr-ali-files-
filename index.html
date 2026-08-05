@@ -1117,6 +1117,13 @@
       .auth-card { max-width: 400px; }
     }
   </style>
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <style>
+    /* Custom Plyr theme to match platform gold */
+    :root {
+      --plyr-color-main: var(--gold);
+    }
+  </style>
 </head>
 <body>
 
@@ -1209,8 +1216,10 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
   <script src="app.js?v=6"></script>
 </body>
 </html>
