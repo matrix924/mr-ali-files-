@@ -1,0 +1,65 @@
+// Firebase Security Rules for Firestore
+// Copy these rules to your Firebase Console > Firestore > Rules
+//
+// IMPORTANT: These rules restrict access to authenticated users only.
+// For production, you should implement proper Firebase Authentication
+// instead of the custom login system.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Platform collection - restrict to authenticated users
+    match /platform/{document} {
+      // Allow read/write for all authenticated users
+      // In production, restrict to admin/teacher roles
+      allow read, write: if request.auth != null;
+
+      // Users document
+      match /users {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
+
+      // Content document
+      match /content {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
+
+      // Exams document
+      match /exams {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
+
+      // Tracking document
+      match /tracking {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
+    }
+
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// ============================================================
+// RECOMMENDED: For better security, implement Firebase Auth
+// and use these rules instead:
+//
+// rules_version = '2';
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     match /platform/{document} {
+//       // Only teachers can write
+//       allow read: if request.auth != null;
+//       allow write: if request.auth != null &&
+//                     request.auth.token.role == 'teacher';
+//     }
+//   }
+// }
+// ============================================================
