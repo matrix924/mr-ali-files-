@@ -1,4 +1,6 @@
 // ============ Content Management (Teacher) ============
+let _contentPage = 1;
+
 function getContentCountByStage() {
   const counts = {};
   STAGES.forEach(s => counts[s] = getAllStageItems(s).length);
@@ -7,6 +9,7 @@ function getContentCountByStage() {
 }
 
 function loadContentManager() {
+  _contentPage = 1;
   const counts = getContentCountByStage();
   document.getElementById('dashboardContent').innerHTML = `
     <h2 style="color: var(--gold); margin-bottom: 25px;">
@@ -33,15 +36,17 @@ function loadContentManager() {
       <button class="tab-btn" data-type="file"><i class="fas fa-file"></i> ملفات</button>
     </div>
     <div class="search-bar">
-      <input type="text" class="form-control" placeholder="بحث في العنوان أو الوصف..." id="contentSearch" oninput="renderContent()">
+      <input type="text" class="form-control" placeholder="بحث في العنوان أو الوصف..." id="contentSearch" oninput="_contentPage=1;renderContent()">
     </div>
     <div class="lesson-grid" id="contentGrid"></div>
+    <div id="contentPagination"></div>
   `;
 
   document.querySelectorAll('#stageTabs .tab-btn').forEach(btn => {
     btn.addEventListener('click', function () {
       document.querySelectorAll('#stageTabs .tab-btn').forEach(b => b.classList.remove('active'));
       this.classList.add('active');
+      _contentPage = 1;
       renderContent();
     });
   });
@@ -50,6 +55,7 @@ function loadContentManager() {
     btn.addEventListener('click', function () {
       document.querySelectorAll('#categoryTabs .tab-btn').forEach(b => b.classList.remove('active'));
       this.classList.add('active');
+      _contentPage = 1;
       renderContent();
     });
   });
@@ -58,6 +64,7 @@ function loadContentManager() {
     btn.addEventListener('click', function () {
       document.querySelectorAll('#typeTabs .tab-btn').forEach(b => b.classList.remove('active'));
       this.classList.add('active');
+      _contentPage = 1;
       renderContent();
     });
   });
@@ -93,20 +100,24 @@ function renderContent() {
     );
   }
 
+  // Paginate
+  const pagination = paginate(items, _contentPage, PAGINATION.contentPerPage);
+
   const grid = document.getElementById('contentGrid');
   if (!grid) return;
 
-  if (items.length === 0) {
+  if (pagination.items.length === 0) {
     grid.innerHTML = `
       <div class="empty-state">
         <i class="fas fa-inbox"></i>
         <p>لا يوجد محتوى${searchQuery ? ' يطابق البحث' : ''}</p>
       </div>
     `;
+    renderPagination('contentPagination', pagination, 'goToContentPage');
     return;
   }
 
-  grid.innerHTML = items.map(item => {
+  grid.innerHTML = pagination.items.map(item => {
     let icon = '', badgeClass = '', badgeText = '';
     if (item.type === 'video') {
       icon = '<i class="fab fa-youtube" style="color:#f00;font-size:2.5rem;"></i>';
@@ -156,14 +167,22 @@ function renderContent() {
         <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;">
           ${item.type === 'video' ?
             `<button class="btn btn-sm btn-info" onclick="playVideo('${item.videoId}','${Security.escapeHtml(item.title).replace(/'/g, "\\'")}')"><i class="fas fa-play"></i> تشغيل</button>` :
-            `<button class="btn btn-sm btn-info" onclick="downloadItem('${item.stageId}','${item.id}')"><i class="fas fa-eye"></i> مشاهدة</button>`
+            `<button class="btn btn-sm btn-info" onclick="downloadItem('${item.stageId}','${item.id}')"><i class="fas fa-eye"></i> مشاهدة</button>
+             ${item.fileUrl ? `<a href="${item.fileUrl}" target="_blank" download="${Security.escapeHtml(item.fileName || item.title)}" class="btn btn-sm btn-success" title="تحميل"><i class="fas fa-download"></i> تحميل</a>` : ''}`
           }
           <button class="btn btn-sm btn-outline" onclick="editContentItem('${item.stageId}','${item.id}')"><i class="fas fa-edit"></i> تعديل</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteItem('${item.stageId}','${item.id}')"><i class="fas fa-trash"></i> حذف</button>
+          <button class="btn btn-sm btn-danger" onclick="confirmDeleteItem('${item.stageId}','${item.id}')"><i class="fas fa-trash"></i> حذف</button>
         </div>
       </div>
     `;
   }).join('');
+
+  renderPagination('contentPagination', pagination, 'goToContentPage');
+}
+
+function goToContentPage(page) {
+  _contentPage = page;
+  renderContent();
 }
 
 function editContentItem(stageId, id) {
@@ -239,7 +258,7 @@ function saveEditContent(oldStageId, id, type) {
     DB.content[newStage][newCategory].push(item);
   }
 
-  saveDB();
+  saveDB('content');
   closeModal();
   renderContent();
   showToast('تم التعديل بنجاح!');
@@ -291,7 +310,7 @@ function saveVideo() {
 
   if (!DB.content[s][c]) DB.content[s][c] = [];
   DB.content[s][c].push({
-    id: 'v_' + Date.now(),
+    id: Security.generateId('v'),
     stageId: s,
     category: c,
     title: t,
@@ -301,7 +320,7 @@ function saveVideo() {
     type: 'video',
     date: new Date().toISOString()
   });
-  saveDB();
+  saveDB('content');
   closeModal();
   renderContent();
   showToast('تمت إضافة الفيديو بنجاح!');
@@ -384,7 +403,7 @@ async function savePDF() {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الرفع...';
 
   try {
-    const fileId = 'pdf_' + Date.now();
+    const fileId = Security.generateId('pdf');
     const result = await uploadToCloudinary(window._pdf, s);
 
     if (!DB.content[s][c]) DB.content[s][c] = [];
@@ -401,7 +420,7 @@ async function savePDF() {
       cloudinaryPublicId: result.publicId,
       date: new Date().toISOString()
     });
-    saveDB();
+    saveDB('content');
     closeModal();
     renderContent();
     showToast('تم رفع الملف بنجاح!');
@@ -491,7 +510,7 @@ async function saveFile() {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الرفع...';
 
   try {
-    const fileId = 'file_' + Date.now();
+    const fileId = Security.generateId('file');
     const result = await uploadToCloudinary(window._file, s);
 
     if (!DB.content[s][c]) DB.content[s][c] = [];
@@ -508,7 +527,7 @@ async function saveFile() {
       cloudinaryPublicId: result.publicId,
       date: new Date().toISOString()
     });
-    saveDB();
+    saveDB('content');
     closeModal();
     renderContent();
     showToast('تم رفع الملف بنجاح!');
@@ -524,7 +543,7 @@ async function saveFile() {
 function playVideo(videoId, title) {
   const eff = getEffectiveUser();
   const studentName = eff ? eff.name : 'طالب';
-  const watermarkId = 'wm_' + Date.now();
+  const watermarkId = Security.generateId('wm');
 
   showModal(title, `
     <div id="videoProtect_${watermarkId}" style="position:relative;">
@@ -567,7 +586,7 @@ function playVideo(videoId, title) {
     } else {
       DB.tracking[eff.id].videoProgress[videoId].watched = true;
     }
-    saveDB();
+    saveDB('tracking');
   }
 }
 
@@ -581,15 +600,11 @@ function downloadItem(stageId, id) {
         DB.tracking[eff.id] = { completedLessons: [], videoProgress: {}, examScores: {} };
       }
       DB.tracking[eff.id].completedLessons.push(id);
-      saveDB();
+      saveDB('tracking');
     }
   }
   if (item?.fileUrl) {
-    if (item.type === 'pdf') {
-      viewPDF(item.fileUrl, item.title);
-    } else {
-      window.open(item.fileUrl, '_blank');
-    }
+    viewFileInPlatform(item.fileUrl, item.title, item.type, item.fileName);
     return;
   }
   if (!item?.fileData) { showToast('الملف غير متوفر', 'error'); return; }
@@ -602,25 +617,111 @@ function downloadItem(stageId, id) {
   showToast('جاري التحميل...');
 }
 
-function viewPDF(url) {
-  window.open(url, '_blank');
+function viewFileInPlatform(fileUrl, title, type, fileName) {
+  const modal = document.getElementById('generalModal');
+  const modalContent = document.getElementById('modalContent');
+  if (!modal || !modalContent) {
+    window.open(fileUrl, '_blank');
+    return;
+  }
+
+  // Extract Google Drive file ID if it's a Drive URL
+  let embedUrl = fileUrl;
+  const driveMatch = fileUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (driveMatch) {
+    const fileId = driveMatch[1];
+    // Use Google Docs viewer for better in-browser viewing
+    if (type === 'pdf') {
+      embedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+    } else {
+      // For Word, PowerPoint, Excel - use Google Docs viewer
+      embedUrl = `https://docs.google.com/gview?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+    }
+  }
+
+  const isPDF = type === 'pdf' || (fileName && fileName.toLowerCase().endsWith('.pdf'));
+  const isImage = fileName && /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(fileName);
+
+  let viewerHtml = '';
+
+  if (isImage) {
+    // For images, display directly
+    viewerHtml = `
+      <div class="file-viewer-body" style="background:#333;display:flex;align-items:center;justify-content:center;">
+        <img src="${fileUrl}" alt="${Security.escapeHtml(title)}"
+          style="max-width:100%;max-height:100%;object-fit:contain;"
+          onerror="this.parentElement.innerHTML='<div class=file-viewer-fallback><i class=fas fa-exclamation-triangle></i><h4>فشل تحميل الصورة</h4></div>'">
+      </div>
+    `;
+  } else {
+    // For PDF and other documents, use iframe
+    viewerHtml = `
+      <div class="file-viewer-body">
+        <div class="file-viewer-loading" id="fileViewerLoading">
+          <div class="spinner"></div>
+          <p>جاري تحميل الملف...</p>
+        </div>
+        <iframe src="${embedUrl}"
+          onload="document.getElementById('fileViewerLoading').style.display='none'"
+          allowfullscreen>
+        </iframe>
+      </div>
+    `;
+  }
+
+  modalContent.innerHTML = `
+    <div class="file-viewer-modal" style="max-width:95vw;width:95vw;height:90vh;max-height:90vh;padding:0;display:flex;flex-direction:column;">
+      <div class="file-viewer-header" style="display:flex;justify-content:space-between;align-items:center;padding:15px 20px;border-bottom:1px solid var(--border-color);background:var(--card-bg);border-radius:20px 20px 0 0;flex-shrink:0;">
+        <h3 style="color:var(--gold);font-size:1.1rem;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;">
+          <i class="fas ${isPDF ? 'fa-file-pdf' : isImage ? 'fa-image' : 'fa-file'}"></i>
+          ${Security.escapeHtml(title)}
+        </h3>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a href="${fileUrl}" target="_blank" class="btn btn-sm btn-outline" title="فتح في تبويب جديد">
+            <i class="fas fa-external-link-alt"></i> <span>فتح</span>
+          </a>
+          <a href="${fileUrl}" download="${Security.escapeHtml(fileName || title)}" class="btn btn-sm btn-success" title="تحميل الملف">
+            <i class="fas fa-download"></i> <span>تحميل</span>
+          </a>
+          <button class="btn btn-sm btn-danger" onclick="closeModal()" title="إغلاق">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      ${viewerHtml}
+    </div>
+  `;
+
+  modal.classList.add('show');
+}
+
+function viewPDF(url, title) {
+  viewFileInPlatform(url, title || 'ملف PDF', 'pdf');
+}
+
+function confirmDeleteItem(stageId, id) {
+  const found = findItem(stageId, id);
+  if (!found) return;
+  const item = found.item;
+  showConfirm(`هل أنت متأكد من حذف "${item.title}"؟`, () => {
+    deleteItem(stageId, id);
+  });
 }
 
 async function deleteItem(stageId, id) {
   const found = findItem(stageId, id);
   if (!found) return;
   const item = found.item;
-  if (confirm(`هل أنت متأكد من حذف "${item.title}"؟`)) {
-    showToast('جاري حذف الملف...', 'info');
-    if (item.cloudinaryPublicId) {
-      await deleteFromCloudinary(item.cloudinaryPublicId);
-    } else if (item.fileUrl) {
-      const extractedId = extractPublicIdFromUrl(item.fileUrl);
-      if (extractedId) await deleteFromCloudinary(extractedId);
-    }
-    removeItem(stageId, id);
-    saveDB();
-    renderContent();
-    showToast('تم الحذف بنجاح');
+
+  showToast('جاري حذف الملف...', 'info');
+  if (item.cloudinaryPublicId) {
+    await deleteFromCloudinary(item.cloudinaryPublicId);
+  } else if (item.fileUrl) {
+    const extractedId = extractPublicIdFromUrl(item.fileUrl);
+    if (extractedId) await deleteFromCloudinary(extractedId);
   }
+  removeItem(stageId, id);
+  saveDB('content');
+  renderContent();
+  showToast('تم الحذف بنجاح');
 }

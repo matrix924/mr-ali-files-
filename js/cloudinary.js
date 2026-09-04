@@ -1,12 +1,4 @@
 // ============ Google Drive Upload/Delete ============
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 async function uploadToDrive(file, stage) {
   const MAX_SIZE = 200 * 1024 * 1024;
@@ -27,7 +19,7 @@ async function uploadToDrive(file, stage) {
 
   return {
     url: result.url,
-    publicId: result.fileId,
+    publicId: result.publicId,
     size: file.size,
     format: ext,
     resourceType: file.type
@@ -45,7 +37,7 @@ async function deleteFromDrive(fileId) {
   }
 }
 
-// Alias for backward compatibility
+// Aliases for backward compatibility
 async function uploadToCloudinary(file, stage) {
   return uploadToDrive(file, stage);
 }
@@ -59,5 +51,7 @@ function extractPublicIdFromUrl(fileUrl) {
   try {
     const match = fileUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
     return match ? match[1] : null;
-  } catch (e) { return null; }
+  } catch (e) {
+    return null;
+  }
 }

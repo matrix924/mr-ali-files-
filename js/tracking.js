@@ -78,9 +78,14 @@ function loadTracking() {
             <table>
               <thead><tr><th>الامتحان</th><th>النتيجة</th><th>الحالة</th></tr></thead>
               <tbody>
-                ${Object.entries(tracking.examScores).map(([examId, score]) => `
+                ${Object.entries(tracking.examScores).map(([examId, score]) => {
+                  let examTitle = examId;
+                  const gradeExams = DB.exams[student.grade] || [];
+                  const foundExam = gradeExams.find(e => e.id === examId);
+                  if (foundExam) examTitle = foundExam.title;
+                  return `
                   <tr>
-                    <td>${Security.escapeHtml(examId)}</td>
+                    <td>${Security.escapeHtml(examTitle)}</td>
                     <td><strong>${score}%</strong></td>
                     <td>
                       <span class="badge ${score >= 70 ? 'badge-success' : score >= 50 ? 'badge-warning' : 'badge-danger'}">
@@ -88,7 +93,7 @@ function loadTracking() {
                       </span>
                     </td>
                   </tr>
-                `).join('')}
+                `;}).join('')}
               </tbody>
             </table>
           </div>

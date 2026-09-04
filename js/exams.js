@@ -1,7 +1,9 @@
 // ============ Exams Management (Teacher) ============
 let _currentExamStage = 'prep1';
+let _examsPage = 1;
 
 function loadExamsManager() {
+  _examsPage = 1;
   document.getElementById('dashboardContent').innerHTML = `
     <h2 style="color: var(--gold); margin-bottom: 25px;">
       <i class="fas fa-file-alt"></i> إدارة الامتحانات
@@ -13,12 +15,14 @@ function loadExamsManager() {
       <i class="fas fa-plus"></i> إنشاء امتحان جديد
     </button>
     <div class="lesson-grid" id="examGrid"></div>
+    <div id="examsPagination"></div>
   `;
 
   document.querySelectorAll('#examStageTabs .tab-btn').forEach(btn => {
     btn.addEventListener('click', function () {
       document.querySelectorAll('#examStageTabs .tab-btn').forEach(b => b.classList.remove('active'));
       this.classList.add('active');
+      _examsPage = 1;
       renderExams();
     });
   });
@@ -30,20 +34,27 @@ function renderExams() {
   const activeStage = document.querySelector('#examStageTabs .tab-btn.active')?.dataset?.stage || 'prep1';
   _currentExamStage = activeStage;
   const exams = DB.exams[activeStage] || [];
+
+  // Paginate
+  const pagination = paginate(exams, _examsPage, PAGINATION.examsPerPage);
+
   const grid = document.getElementById('examGrid');
   if (!grid) return;
 
-  if (exams.length === 0) {
+  if (pagination.items.length === 0) {
     grid.innerHTML = `
       <div class="empty-state">
         <i class="fas fa-file-alt"></i>
         <p>لا توجد امتحانات في ${getStageName(activeStage)}</p>
       </div>
     `;
+    renderPagination('examsPagination', pagination, 'goToExamsPage');
     return;
   }
 
-  grid.innerHTML = exams.map((exam, i) => `
+  const startIndex = (pagination.currentPage - 1) * PAGINATION.examsPerPage;
+
+  grid.innerHTML = pagination.items.map((exam, i) => `
     <div class="exam-card">
       <div style="text-align:center;font-size:3rem;margin-bottom:10px;">📝</div>
       <h4>${Security.escapeHtml(exam.title)}</h4>
@@ -53,18 +64,25 @@ function renderExams() {
         <span class="badge">${exam.duration} دقيقة</span>
       </p>
       <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn-sm btn-info" onclick="editExamQs('${activeStage}',${i})">
+        <button class="btn btn-sm btn-info" onclick="editExamQs('${activeStage}',${startIndex + i})">
           <i class="fas fa-edit"></i> تعديل
         </button>
-        <button class="btn btn-sm btn-success" onclick="previewExam('${activeStage}',${i})">
+        <button class="btn btn-sm btn-success" onclick="previewExam('${activeStage}',${startIndex + i})">
           <i class="fas fa-eye"></i> معاينة
         </button>
-        <button class="btn btn-sm btn-danger" onclick="deleteExam('${activeStage}',${i})">
+        <button class="btn btn-sm btn-danger" onclick="confirmDeleteExam('${activeStage}',${startIndex + i})">
           <i class="fas fa-trash"></i> حذف
         </button>
       </div>
     </div>
   `).join('');
+
+  renderPagination('examsPagination', pagination, 'goToExamsPage');
+}
+
+function goToExamsPage(page) {
+  _examsPage = page;
+  renderExams();
 }
 
 function createExam() {
@@ -102,7 +120,7 @@ function saveExam() {
   if (!DB.exams[activeStage]) DB.exams[activeStage] = [];
 
   const exam = {
-    id: 'exam_' + Date.now(),
+    id: Security.generateId('exam'),
     title: t,
     description: d,
     duration: dur,
@@ -110,7 +128,7 @@ function saveExam() {
     createdAt: new Date().toISOString()
   };
   DB.exams[activeStage].push(exam);
-  saveDB();
+  saveDB('exams');
   closeModal();
   editExamQs(activeStage, DB.exams[activeStage].length - 1);
 }
@@ -266,7 +284,7 @@ async function addQ(stageId, examIndex) {
   }
 
   const question = {
-    id: 'q_' + Date.now(),
+    id: Security.generateId('q'),
     text: text,
     options: opts,
     correctAnswer: correct
@@ -275,7 +293,7 @@ async function addQ(stageId, examIndex) {
   if (hasOptionImages) question.optionImages = optionImages;
 
   DB.exams[stageId][examIndex].questions.push(question);
-  saveDB();
+  saveDB('exams');
   btn.disabled = false;
   btn.innerHTML = '<i class="fas fa-plus"></i> إضافة السؤال';
   editExamQs(stageId, examIndex);
@@ -283,12 +301,12 @@ async function addQ(stageId, examIndex) {
 }
 
 function removeQ(stageId, examIndex, qIndex) {
-  if (confirm('حذف هذا السؤال؟')) {
+  showConfirm('حذف هذا السؤال؟', () => {
     DB.exams[stageId][examIndex].questions.splice(qIndex, 1);
-    saveDB();
+    saveDB('exams');
     editExamQs(stageId, examIndex);
     showToast('تم الحذف');
-  }
+  });
 }
 
 function previewExam(stageId, examIndex) {
@@ -322,11 +340,17 @@ function previewExam(stageId, examIndex) {
   showModal(`معاينة: ${exam.title}`, html);
 }
 
+function confirmDeleteExam(stageId, examIndex) {
+  const exam = DB.exams[stageId][examIndex];
+  if (!exam) return;
+  showConfirm(`هل أنت متأكد من حذف امتحان "${exam.title}"؟`, () => {
+    deleteExam(stageId, examIndex);
+  });
+}
+
 function deleteExam(stageId, examIndex) {
-  if (confirm('هل أنت متأكد من حذف هذا الامتحان؟')) {
-    DB.exams[stageId].splice(examIndex, 1);
-    saveDB();
-    renderExams();
-    showToast('تم الحذف');
-  }
+  DB.exams[stageId].splice(examIndex, 1);
+  saveDB('exams');
+  renderExams();
+  showToast('تم الحذف');
 }

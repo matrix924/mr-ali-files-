@@ -100,10 +100,11 @@ function renderStudentContent() {
         <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:8px;">
           <i class="fas fa-calendar"></i> ${formatDate(item.date)}
         </p>
-        <div style="margin-top:12px;">
+        <div style="margin-top:12px;display:flex;gap:8px;">
           ${item.type === 'video' ?
             `<button class="btn btn-info btn-block" onclick="playVideo('${item.videoId}','${Security.escapeHtml(item.title).replace(/'/g, "\\'")}')"><i class="fas fa-play"></i> مشاهدة</button>` :
-            `<button class="btn btn-info btn-block" onclick="downloadItem('${item.stageId}','${item.id}')"><i class="fas fa-eye"></i> مشاهدة</button>`
+            `<button class="btn btn-info" style="flex:1;" onclick="downloadItem('${item.stageId}','${item.id}')"><i class="fas fa-eye"></i> مشاهدة</button>
+             <a href="${item.fileUrl || '#'}" target="_blank" download="${Security.escapeHtml(item.fileName || item.title)}" class="btn btn-success" style="flex:0 0 auto;" title="تحميل"><i class="fas fa-download"></i></a>`
           }
         </div>
       </div>
@@ -180,26 +181,26 @@ function startExam(stageId, examIndex) {
     return;
   }
 
-  if (!confirm(`هل أنت مستعد لبدء امتحان "${exam.title}"?\nالمدة: ${exam.duration} دقيقة\nعدد الأسئلة: ${exam.questions.length}`)) return;
+  showConfirm(`هل أنت مستعد لبدء امتحان "${exam.title}"?\nالمدة: ${exam.duration} دقيقة\nعدد الأسئلة: ${exam.questions.length}`, () => {
+    examState = {
+      currentExam: { stageId, examIndex, exam },
+      answers: {},
+      timeRemaining: exam.duration * 60,
+      timerInterval: null,
+      currentQuestion: 0
+    };
 
-  examState = {
-    currentExam: { stageId, examIndex, exam },
-    answers: {},
-    timeRemaining: exam.duration * 60,
-    timerInterval: null,
-    currentQuestion: 0
-  };
+    document.getElementById('examModal').classList.add('show');
+    renderExamQuestion();
 
-  document.getElementById('examModal').classList.add('show');
-  renderExamQuestion();
-
-  examState.timerInterval = setInterval(() => {
-    examState.timeRemaining--;
-    updateTimerDisplay();
-    if (examState.timeRemaining <= 0) {
-      submitExam();
-    }
-  }, 1000);
+    examState.timerInterval = setInterval(() => {
+      examState.timeRemaining--;
+      updateTimerDisplay();
+      if (examState.timeRemaining <= 0) {
+        submitExam();
+      }
+    }, 1000);
+  });
 }
 
 function updateTimerDisplay() {
@@ -304,7 +305,7 @@ function submitExam() {
     DB.tracking[effId] = { completedLessons: [], videoProgress: {}, examScores: {} };
   }
   DB.tracking[effId].examScores[exam.id] = score;
-  saveDB();
+  saveDB('tracking');
 
   document.getElementById('examContent').innerHTML = `
     <div class="exam-result">

@@ -1,5 +1,8 @@
 // ============ Students Management (Teacher) ============
+let _studentsPage = 1;
+
 function loadStudentsManager() {
+  _studentsPage = 1;
   document.getElementById('dashboardContent').innerHTML = `
     <h2 style="color: var(--gold); margin-bottom: 25px;">
       <i class="fas fa-users"></i> إدارة الطلاب
@@ -8,8 +11,8 @@ function loadStudentsManager() {
       <button class="btn btn-gold" onclick="addStudent()"><i class="fas fa-user-plus"></i> إضافة طالب</button>
     </div>
     <div class="search-bar">
-      <input type="text" class="form-control" placeholder="بحث بالاسم أو الصف..." id="studentSearch" oninput="renderStudentsTable()">
-      <select class="form-control" style="max-width:200px;" id="studentFilter" onchange="renderStudentsTable()">
+      <input type="text" class="form-control" placeholder="بحث بالاسم أو الصف..." id="studentSearch" oninput="_studentsPage=1;renderStudentsTable()">
+      <select class="form-control" style="max-width:200px;" id="studentFilter" onchange="_studentsPage=1;renderStudentsTable()">
         <option value="all">جميع الصفوف</option>
         ${STAGES.map(s => `<option value="${s}">${getStageName(s)}</option>`).join('')}
       </select>
@@ -29,6 +32,7 @@ function loadStudentsManager() {
         <tbody id="studentsTableBody"></tbody>
       </table>
     </div>
+    <div id="studentsPagination"></div>
   `;
   renderStudentsTable();
 }
@@ -43,16 +47,22 @@ function renderStudentsTable() {
   if (filter !== 'all') students = students.filter(st => st.grade === filter);
   if (search) students = students.filter(st => st.name.toLowerCase().includes(search) || getStageName(st.grade).includes(search));
 
-  if (students.length === 0) {
+  // Paginate
+  const pagination = paginate(students, _studentsPage, PAGINATION.studentsPerPage);
+
+  if (pagination.items.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">لا يوجد طلاب</td></tr>';
+    renderPagination('studentsPagination', pagination, 'goToStudentsPage');
     return;
   }
 
-  tbody.innerHTML = students.map((s, i) => {
+  const startIndex = (pagination.currentPage - 1) * PAGINATION.studentsPerPage;
+
+  tbody.innerHTML = pagination.items.map((s, i) => {
     const p = DB.parents.find(pr => pr.studentId === s.id);
     return `
       <tr>
-        <td>${i + 1}</td>
+        <td>${startIndex + i + 1}</td>
         <td><strong>${Security.escapeHtml(s.name)}</strong></td>
         <td><span class="badge">${getStageName(s.grade)}</span></td>
         <td><code style="background:var(--input-bg);padding:3px 8px;border-radius:5px;">${Security.escapeHtml(s.username)}</code></td>
@@ -64,13 +74,20 @@ function renderStudentsTable() {
           <button class="btn btn-sm btn-success" onclick="viewStudentTracking('${s.id}')" title="عرض التقدم">
             <i class="fas fa-chart-line"></i>
           </button>
-          <button class="btn btn-sm btn-danger" onclick="delStudent('${s.id}')" title="حذف">
+          <button class="btn btn-sm btn-danger" onclick="confirmDeleteStudent('${s.id}')" title="حذف">
             <i class="fas fa-trash"></i>
           </button>
         </td>
       </tr>
     `;
   }).join('');
+
+  renderPagination('studentsPagination', pagination, 'goToStudentsPage');
+}
+
+function goToStudentsPage(page) {
+  _studentsPage = page;
+  renderStudentsTable();
 }
 
 function addStudent() {
@@ -103,11 +120,13 @@ async function genAccounts() {
   if (!validateField(pn, 'اسم ولي الأمر', 2)) return;
 
   let su, pu;
-  do { su = generateUsername(sn, 'student'); } while (DB.students.some(st => st.username === su));
-  do { pu = generateUsername(pn, 'parent'); } while (DB.parents.some(p => p.username === pu));
+  do { su = Security.generateUsername(sn, 'student'); } while (DB.students.some(st => st.username === su));
+  do { pu = Security.generateUsername(pn, 'parent'); } while (DB.parents.some(p => p.username === pu));
 
-  const sp = generatePassword(), pp = generatePassword();
-  const sid = 's_' + Date.now(), pid = 'p_' + Date.now();
+  const sp = Security.generatePassword();
+  const pp = Security.generatePassword();
+  const sid = Security.generateId('s');
+  const pid = Security.generateId('p');
 
   const hashedStudentPass = await Security.hashPassword(sp);
   const hashedParentPass = await Security.hashPassword(pp);
@@ -126,7 +145,8 @@ async function genAccounts() {
     studentId: sid, studentName: sn, grade: sg,
     completedLessons: [], videoProgress: {}, examScores: {}
   };
-  saveDB();
+  saveDB('users');
+  saveDB('tracking');
 
   document.getElementById('genResult').innerHTML = `
       <div style="background:var(--input-bg);padding:20px;border-radius:15px;border:2px solid var(--success);">
@@ -142,10 +162,10 @@ async function genAccounts() {
         <span>كلمة المرور: ${Security.escapeHtml(pp)}</span>
       </div>
       <div style="display:flex;gap:10px;margin-top:12px;">
-        <button class="btn btn-info" style="flex:1;" onclick="copyCredentials('${Security.escapeHtml(su)}','${Security.escapeHtml(sp)}','${Security.escapeHtml(su)}','${Security.escapeHtml(sp)}')">
+        <button class="btn btn-info" style="flex:1;" onclick="copyCredentials('${Security.escapeHtml(su)}','${Security.escapeHtml(sp)}')">
           <i class="fas fa-copy"></i> نسخ بيانات الطالب
         </button>
-        <button class="btn btn-info" style="flex:1;" onclick="copyCredentials('${Security.escapeHtml(pu)}','${Security.escapeHtml(pp)}','${Security.escapeHtml(pu)}','${Security.escapeHtml(pp)}')">
+        <button class="btn btn-info" style="flex:1;" onclick="copyCredentials('${Security.escapeHtml(pu)}','${Security.escapeHtml(pp)}')">
           <i class="fas fa-copy"></i> نسخ بيانات ولي الأمر
         </button>
       </div>
@@ -173,13 +193,13 @@ function viewCred(sid) {
     <div style="background:var(--input-bg);padding:15px;border-radius:10px;font-family:monospace;line-height:2;border:1px solid var(--border-color);margin-bottom:10px;">
       <strong style="color:var(--gold);">🎓 الطالب:</strong><br>
       <p><strong>المستخدم:</strong> ${Security.escapeHtml(s.username)}</p>
-      <p><strong>كلمة المرور (md5):</strong> ${Security.escapeHtml(s.password)}</p>
+      <p><strong>كلمة المرور (SHA-256):</strong> ${Security.escapeHtml(s.password)}</p>
     </div>
     ${p ? `
     <div style="background:var(--input-bg);padding:15px;border-radius:10px;font-family:monospace;line-height:2;border:1px solid var(--border-color);margin-bottom:10px;">
       <strong style="color:var(--gold);">👨‍👧 ولي الأمر:</strong><br>
       <p><strong>المستخدم:</strong> ${Security.escapeHtml(p.username)}</p>
-      <p><strong>كلمة المرور (md5):</strong> ${Security.escapeHtml(p.password)}</p>
+      <p><strong>كلمة المرور (SHA-256):</strong> ${Security.escapeHtml(p.password)}</p>
     </div>
     ` : ''}
     <div style="display:flex;gap:10px;margin-top:15px;">
@@ -201,11 +221,7 @@ function viewCred(sid) {
 }
 
 function copyCredentials(user, pass) {
-  navigator.clipboard.writeText(`المستخدم: ${user}\nكلمة المرور: ${pass}`).then(() => {
-    showToast('تم النسخ!');
-  }).catch(() => {
-    showToast('لم يتم النسخ', 'error');
-  });
+  copyToClipboard(`المستخدم: ${user}\nكلمة المرور: ${pass}`);
 }
 
 function copyAllCredentials(sUser, sPass, sName, pUser, pPass, pName) {
@@ -219,11 +235,7 @@ function copyAllCredentials(sUser, sPass, sName, pUser, pPass, pName) {
     `المستخدم: ${pUser}\n` +
     `كلمة المرور: ${pPass}\n` +
     `━━━━━━━━━━━━━━━━━━━━`;
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('تم نسخ كل البيانات!');
-  }).catch(() => {
-    showToast('لم يتم النسخ', 'error');
-  });
+  copyToClipboard(text, 'تم نسخ كل البيانات!');
 }
 
 function viewStudentTracking(sid) {
@@ -233,16 +245,21 @@ function viewStudentTracking(sid) {
   navigate('tracking');
 }
 
-function delStudent(sid) {
+function confirmDeleteStudent(sid) {
   const studentToDelete = DB.students.find(st => st.id === sid);
   if (!studentToDelete) return;
-  if (confirm(`هل أنت متأكد من حذف الطالب "${studentToDelete.name}" وولي أمره؟`)) {
-    const parentToDelete = DB.parents.find(pr => pr.studentId === sid);
-    DB.students = DB.students.filter(st => st.id !== sid);
-    if (parentToDelete) DB.parents = DB.parents.filter(pr => pr.id !== parentToDelete.id);
-    delete DB.tracking[sid];
-    saveDB();
-    renderStudentsTable();
-    showToast('تم الحذف');
-  }
+  showConfirm(`هل أنت متأكد من حذف الطالب "${studentToDelete.name}" وولي أمره؟`, () => {
+    delStudent(sid);
+  });
+}
+
+function delStudent(sid) {
+  const parentToDelete = DB.parents.find(pr => pr.studentId === sid);
+  DB.students = DB.students.filter(st => st.id !== sid);
+  if (parentToDelete) DB.parents = DB.parents.filter(pr => pr.id !== parentToDelete.id);
+  delete DB.tracking[sid];
+  saveDB('users');
+  saveDB('tracking');
+  renderStudentsTable();
+  showToast('تم الحذف');
 }

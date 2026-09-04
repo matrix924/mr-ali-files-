@@ -19,7 +19,7 @@ function showBackupModal() {
     <hr style="border-color:var(--border-color);margin:20px 0;">
     <div>
       <h4 style="color:var(--danger);margin-bottom:15px;"><i class="fas fa-trash"></i> مسح جميع البيانات</h4>
-      <button class="btn btn-danger btn-block" onclick="clearAllData()"><i class="fas fa-trash"></i> مسح كل البيانات</button>
+      <button class="btn btn-danger btn-block" onclick="confirmClearAllData()"><i class="fas fa-trash"></i> مسح كل البيانات</button>
     </div>
   `);
 }
@@ -33,7 +33,7 @@ function exportData() {
     exams: DB.exams,
     tracking: DB.tracking,
     exportDate: new Date().toISOString(),
-    version: '4.0'
+    version: '5.0'
   };
 
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -58,20 +58,21 @@ function importData(inp) {
       const data = JSON.parse(e.target.result);
       if (!data.version) throw new Error('ملف غير صالح');
 
-      if (!confirm('سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟')) return;
+      showConfirm('سيتم استبدال جميع البيانات الحالية. هل أنت متأكد؟', () => {
+        DB.teachers = data.teachers || DB.teachers;
+        DB.students = data.students || [];
+        DB.parents = data.parents || [];
+        DB.content = data.content ? migrateContent(data.content) : DB.content;
+        DB.exams = data.exams || DB.exams;
+        DB.tracking = data.tracking || {};
 
-      DB.teachers = data.teachers || DB.teachers;
-      DB.students = data.students || [];
-      DB.parents = data.parents || [];
-      DB.content = data.content ? migrateContent(data.content) : DB.content;
-      DB.exams = data.exams || DB.exams;
-      DB.tracking = data.tracking || {};
+        Object.keys(_dirtyFlags).forEach(k => markDirty(k));
+        saveDB();
 
-      saveDB();
-
-      closeModal();
-      showToast('تم الاستيراد بنجاح! أعد تحميل الصفحة.');
-      setTimeout(() => location.reload(), 2000);
+        closeModal();
+        showToast('تم الاستيراد بنجاح! أعد تحميل الصفحة.');
+        setTimeout(() => location.reload(), 2000);
+      });
     } catch (err) {
       showToast('خطأ في ملف البيانات: ' + err.message, 'error');
     }
@@ -79,10 +80,11 @@ function importData(inp) {
   reader.readAsText(file);
 }
 
-function clearAllData() {
-  if (!confirm('هل أنت متأكد من مسح جميع البيانات؟')) return;
-  if (!confirm('تأكيد أخير: سيتم حذف جميع البيانات نهائياً!')) return;
+function confirmClearAllData() {
+  showConfirm('هل أنت متأكد من مسح جميع البيانات؟ سيتم حذف جميع البيانات نهائياً!', clearAllData);
+}
 
+function clearAllData() {
   DB.teachers = [];
   DB.students = [];
   DB.parents = [];
@@ -90,6 +92,7 @@ function clearAllData() {
   DB.exams = { prep1: [], prep2: [], prep3: [], sec1: [], sec2: [], sec3: [] };
   DB.tracking = {};
 
+  Object.keys(_dirtyFlags).forEach(k => markDirty(k));
   saveDB();
   initDefaultTeacher();
   location.reload();

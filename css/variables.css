@@ -1,0 +1,18 @@
+:root {
+  --gold: #c9a84c;
+  --gold-light: #e8d48b;
+  --gold-dark: #a8872e;
+  --card-bg: #ffffff;
+  --input-bg: #f9f9f9;
+  --text-primary: #1a1a1a;
+  --text-secondary: #777777;
+  --danger: #e53935;
+  --success: #43a047;
+  --info: #1e88e5;
+  --warning: #fb8c00;
+  --border-color: #e0e0e0;
+  --sidebar-width: 280px;
+  --navbar-height: 70px;
+  --transition: 0.3s ease;
+  --plyr-color-main: var(--gold);
+}
