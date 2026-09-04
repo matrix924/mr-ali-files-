@@ -20,75 +20,103 @@ const DB = {
 let currentUser = null;
 let examState = { currentExam: null, answers: {}, timeRemaining: 0, timerInterval: null, currentQuestion: 0 };
 
+// ============ Dirty Tracking for Partial Saves ============
+const _dirtyFlags = {
+  users: false,
+  content: false,
+  exams: false,
+  tracking: false
+};
+
+function markDirty(section) {
+  if (_dirtyFlags.hasOwnProperty(section)) {
+    _dirtyFlags[section] = true;
+  }
+}
+
+function isDirty(section) {
+  return _dirtyFlags[section] === true;
+}
+
+function clearDirty(section) {
+  if (_dirtyFlags.hasOwnProperty(section)) {
+    _dirtyFlags[section] = false;
+  }
+}
+
+function clearAllDirty() {
+  Object.keys(_dirtyFlags).forEach(k => _dirtyFlags[k] = false);
+}
+
+// ============ Save Functions ============
 let _saveTimeout = null;
-let _pendingSave = null;
 let _apiWorking = false;
 
-function _saveToLocalStorage() {
-  try {
-    const data = { teachers: DB.teachers, students: DB.students, parents: DB.parents, content: DB.content, exams: DB.exams, tracking: DB.tracking };
-    localStorage.setItem('mathPlatformDB', JSON.stringify(data));
-  } catch (e) { /* ignore */ }
-}
+async function _saveDirtySections() {
+  if (!_apiWorking) return true;
 
-function _loadFromLocalStorage() {
   try {
-    const raw = localStorage.getItem('mathPlatformDB');
-    if (!raw) return false;
-    const data = JSON.parse(raw);
-    DB.teachers = data.teachers || [];
-    DB.students = data.students || [];
-    DB.parents = data.parents || [];
-    DB.content = data.content ? migrateContent(data.content) : createEmptyContent();
-    DB.exams = data.exams || { prep1: [], prep2: [], prep3: [], sec1: [], sec2: [], sec3: [] };
-    DB.tracking = data.tracking || {};
+    const promises = [];
+
+    if (isDirty('users')) {
+      promises.push(API.saveUsers(DB.teachers, DB.students, DB.parents).then(() => clearDirty('users')));
+    }
+    if (isDirty('content')) {
+      promises.push(API.saveContent(DB.content).then(() => clearDirty('content')));
+    }
+    if (isDirty('exams')) {
+      promises.push(API.saveExams(DB.exams).then(() => clearDirty('exams')));
+    }
+    if (isDirty('tracking')) {
+      promises.push(API.saveTracking(DB.tracking).then(() => clearDirty('tracking')));
+    }
+
+    if (promises.length > 0) {
+      await Promise.all(promises);
+      console.log('Saved sections:', promises.length);
+    }
+
     return true;
-  } catch (e) { return false; }
+  } catch (e) {
+    console.error('Error saving to API:', e);
+    return false;
+  }
 }
 
-window.saveDB = function () {
-  _saveToLocalStorage();
+window.saveDB = function (section = null) {
   if (!_apiWorking) return Promise.resolve(true);
 
+  // Mark specific section or all as dirty
+  if (section) {
+    markDirty(section);
+  } else {
+    Object.keys(_dirtyFlags).forEach(k => markDirty(k));
+  }
+
   clearTimeout(_saveTimeout);
-  _pendingSave = new Promise((resolve) => {
-    _saveTimeout = setTimeout(async () => {
-      try {
-        console.log('Saving to API...');
-        await API.saveUsers(DB.teachers, DB.students, DB.parents);
-        await API.saveContent(DB.content);
-        await API.saveExams(DB.exams);
-        await API.saveTracking(DB.tracking);
-        console.log('Save successful');
-        resolve(true);
-      } catch (e) {
-        console.error('Error saving DB:', e);
-        resolve(false);
-      }
-    }, 500);
-  });
-  return _pendingSave;
+  _saveTimeout = setTimeout(async () => {
+    await _saveDirtySections();
+  }, 800);
+
+  return Promise.resolve(true);
 };
 
 window.saveDBSync = async function () {
-  _saveToLocalStorage();
   if (!_apiWorking) return true;
 
   clearTimeout(_saveTimeout);
+  Object.keys(_dirtyFlags).forEach(k => markDirty(k));
+
   try {
-    console.log('Saving to API (sync)...');
-    await API.saveUsers(DB.teachers, DB.students, DB.parents);
-    await API.saveContent(DB.content);
-    await API.saveExams(DB.exams);
-    await API.saveTracking(DB.tracking);
-    console.log('Save successful');
+    await _saveDirtySections();
     return true;
   } catch (e) {
-    console.error('Error saving DB:', e);
+    console.error('Error in sync save:', e);
     return false;
   }
 };
 
+// ============ Content Migration ============
 function migrateContent(oldContent) {
   if (!oldContent) return createEmptyContent();
   const newContent = createEmptyContent();
@@ -110,6 +138,7 @@ function migrateContent(oldContent) {
   return newContent;
 }
 
+// ============ Content Helpers ============
 function getAllStageItems(stageId) {
   const items = [];
   const stageContent = DB.content[stageId];
@@ -174,16 +203,20 @@ function getEffectiveUser() {
   return currentUser;
 }
 
+// ============ Load from API ============
 async function loadDBFromAPI() {
   try {
-    console.log('Testing API connection...');
-    const data = await API.getAllData();
-    console.log('API response:', data);
+    console.log('Testing API connection to:', APPS_SCRIPT_URL);
+    const result = await API.testConnection();
+    console.log('API test result:', result);
 
-    if (!data) throw new Error('لا توجد بيانات من الخادم');
-    if (data.error) throw new Error(data.error);
-    if (data.raw && !data.teachers) throw new Error('الاستجابة ليست JSON صالح');
+    if (!result.ok) {
+      console.error('API connection failed:', result.error);
+      _apiWorking = false;
+      return false;
+    }
 
+    const data = result.data;
     DB.teachers = data.teachers || [];
     DB.students = data.students || [];
     DB.parents = data.parents || [];
@@ -192,18 +225,11 @@ async function loadDBFromAPI() {
     DB.tracking = data.tracking || {};
 
     _apiWorking = true;
-    console.log('API connected. Teachers:', DB.teachers.length);
+    console.log('API connected successfully. Teachers:', DB.teachers.length, 'Students:', DB.students.length);
     return true;
   } catch (e) {
     console.error("API not available:", e.message);
     _apiWorking = false;
-    console.log('Trying localStorage fallback...');
-    const loaded = _loadFromLocalStorage();
-    if (loaded) {
-      console.log('Loaded from localStorage. Teachers:', DB.teachers.length);
-    } else {
-      console.log('No localStorage data either. Starting empty.');
-    }
     return false;
   }
 }

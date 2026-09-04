@@ -13,6 +13,7 @@
 (async function () {
   API.init(APPS_SCRIPT_URL);
 
+  // Setup event listeners
   document.getElementById('loginSubmitBtn').addEventListener('click', e => {
     e.preventDefault();
     login();
@@ -69,26 +70,33 @@
   const loaderTimeout = setTimeout(() => {
     const el = document.getElementById('initLoader');
     if (el) el.remove();
-    const status = document.getElementById('initStatus');
-    if (status) status.textContent = '';
   }, 15000);
 
-  // Load data (with fallback)
+  // 1) Load data from API
+  console.log('[Init] Loading data from:', APPS_SCRIPT_URL);
   const apiOk = await loadDBFromAPI();
+  console.log('[Init] API ok:', apiOk, 'Teachers:', DB.teachers.length);
+
+  // 2) Create default teacher if DB is empty
+  console.log('[Init] Running initDefaultTeacher...');
+  await initDefaultTeacher();
+  console.log('[Init] After initDefaultTeacher - Teachers:', DB.teachers.length);
 
   clearTimeout(loaderTimeout);
   const el = document.getElementById('initLoader');
   if (el) el.remove();
 
-  if (!apiOk && !DB.teachers.length) {
-    showToast('تعذر الاتصال بالخادم - سيعمل التطبيق بدون حفظ', 'warning');
-  }
+  // 3) Check session AFTER DB is ready
+  const hasSession = checkSession();
+  console.log('[Init] Has session:', hasSession);
 
-  // Init default teacher
-  await initDefaultTeacher();
+  if (!apiOk) {
+    showToast('تعذر الاتصال بالخادم - تحقق من رابط Apps Script واعد النشر', 'error');
+    console.error('[Init] Connection failed. URL:', APPS_SCRIPT_URL);
+  }
 })();
 
-// ============ Expose to window ============
+// ============ Expose essential functions to window ============
 window.login = login;
 window.logout = logout;
 window.navigate = navigate;
@@ -96,23 +104,11 @@ window.loadSection = loadSection;
 window.showModal = showModal;
 window.closeModal = closeModal;
 window.showToast = showToast;
-window.copyCredentials = copyCredentials;
-window.copyAllCredentials = copyAllCredentials;
-window.genAccounts = genAccounts;
-window.addStudent = addStudent;
-window.delStudent = delStudent;
-window.viewCred = viewCred;
-window.renderStudentsTable = renderStudentsTable;
-window.loadStudentsManager = loadStudentsManager;
-window.createExam = createExam;
-window.saveExam = saveExam;
-window.addQ = addQ;
-window.removeQ = removeQ;
-window.editExamQs = editExamQs;
-window.previewExam = previewExam;
-window.deleteExam = deleteExam;
-window.renderExams = renderExams;
-window.loadExamsManager = loadExamsManager;
+window.toggleSidebar = toggleSidebar;
+window.showConfirm = showConfirm;
+window.copyToClipboard = copyToClipboard;
+
+// Content management
 window.addVideo = addVideo;
 window.saveVideo = saveVideo;
 window.uploadPDF = uploadPDF;
@@ -121,18 +117,21 @@ window.uploadFile = uploadFile;
 window.saveFile = saveFile;
 window.handlePdf = handlePdf;
 window.handleFile = handleFile;
-window.renderContent = renderContent;
-window.loadContentManager = loadContentManager;
 window.editContentItem = editContentItem;
 window.saveEditContent = saveEditContent;
 window.deleteItem = deleteItem;
 window.downloadItem = downloadItem;
-window.loadOverview = loadOverview;
-window.loadTracking = loadTracking;
-window.loadStudentProgress = loadStudentProgress;
-window.viewStudentTracking = viewStudentTracking;
-window.loadStudentContentView = loadStudentContentView;
-window.loadStudentExamsView = loadStudentExamsView;
+window.playVideo = playVideo;
+window.goToContentPage = goToContentPage;
+
+// Exams
+window.createExam = createExam;
+window.saveExam = saveExam;
+window.addQ = addQ;
+window.removeQ = removeQ;
+window.editExamQs = editExamQs;
+window.previewExam = previewExam;
+window.deleteExam = deleteExam;
 window.startExam = startExam;
 window.submitExam = submitExam;
 window.selectExamOption = selectExamOption;
@@ -140,28 +139,61 @@ window.nextQuestion = nextQuestion;
 window.prevQuestion = prevQuestion;
 window.goToQuestion = goToQuestion;
 window.closeExamModal = closeExamModal;
-window.updateTimerDisplay = updateTimerDisplay;
-window.playVideo = playVideo;
-window.toggleSidebar = toggleSidebar;
-window.buildSidebar = buildSidebar;
+window.addOptionRow = addOptionRow;
+window.goToExamsPage = goToExamsPage;
+
+// Students
+window.addStudent = addStudent;
+window.genAccounts = genAccounts;
+window.viewCred = viewCred;
+window.delStudent = delStudent;
+window.confirmDeleteStudent = confirmDeleteStudent;
+window.confirmDeleteItem = confirmDeleteItem;
+window.confirmDeleteExam = confirmDeleteExam;
+window.goToStudentsPage = goToStudentsPage;
+
+// Tracking
+window.loadStudentProgress = loadStudentProgress;
+window.viewStudentTracking = viewStudentTracking;
+
+// Backup
 window.showBackupModal = showBackupModal;
 window.exportData = exportData;
 window.importData = importData;
 window.clearAllData = clearAllData;
-window.generatePassword = generatePassword;
-window.generateUsername = generateUsername;
-window.validateField = validateField;
-window.validateEmail = validateEmail;
-window.extractYouTubeId = extractYouTubeId;
+
+// Utility functions
 window.formatSize = formatSize;
 window.formatTime = formatTime;
 window.formatDate = formatDate;
 window.getStageName = getStageName;
-window.getContentCountByStage = getContentCountByStage;
-window.getAllStageItems = getAllStageItems;
-window.getAllContentItems = getAllContentItems;
-window.addOptionRow = addOptionRow;
+window.validateField = validateField;
+window.extractYouTubeId = extractYouTubeId;
 window.setupDragDrop = setupDragDrop;
+window.paginate = paginate;
+window.renderPagination = renderPagination;
+
+// Content loading
+window.loadStudentsManager = loadStudentsManager;
+window.loadContentManager = loadContentManager;
+window.loadExamsManager = loadExamsManager;
+
+// Student view
+window.loadStudentContentView = loadStudentContentView;
+window.loadStudentExamsView = loadStudentExamsView;
+window.loadStudentMyExams = loadStudentMyExams;
+
+// Overview & Tracking
+window.loadOverview = loadOverview;
+window.loadTracking = loadTracking;
+
+// Init
 window.initDefaultTeacher = initDefaultTeacher;
+
+// Constants
 window.CATEGORY_NAMES = CATEGORY_NAMES;
 window.CATEGORY_ICONS = CATEGORY_ICONS;
+
+// Student view helpers
+window.getAllStageItems = getAllStageItems;
+window.getContentCountByStage = getContentCountByStage;

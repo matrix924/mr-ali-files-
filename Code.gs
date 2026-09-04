@@ -1,4 +1,4 @@
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';
+const SPREADSHEET_ID = '1nW-VURklxh3KM2YI1Q8WMxaXefNBpmDsErisaZrlWWw';
 
 // ============ Input Validation ============
 const Validators = {
@@ -107,6 +107,18 @@ function doPost(e) {
     let result;
 
     switch (action) {
+      case 'saveUsers':
+        result = saveUsers(body);
+        break;
+      case 'saveContent':
+        result = saveContent(body);
+        break;
+      case 'saveExams':
+        result = saveExams(body);
+        break;
+      case 'saveTracking':
+        result = saveTracking(body);
+        break;
       case 'uploadFile':
         result = uploadFile(body);
         break;
