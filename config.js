@@ -1,6 +1,6 @@
 // ============ Apps Script Config ============
 // عيّن رابط Google Apps Script هنا بعد deploy
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyV7SQ5UEommZDzrt9XrsJrc4l6AghQFJLWuU7srZw_a-HAY1KckR2Xpg9mL12RjTnW_w/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxhdAZzuGtyYyTS5CzrVnoDohgUutFU0u-zhkxXY8U6Q33v206lhR2N76BjhBlQGP9Duw/exec';
 
 // ============ Security Config ============
 const SECURITY_CONFIG = {
